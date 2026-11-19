@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>Woodpecker Tactics</title>
+<style>
+:root{
+  color-scheme: dark;
+  --page:#0d0d0d; --surface:#1a1a19; --surface2:#242423;
+  --ink:#ffffff; --ink2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+  --accent:#3987e5; --good:#0ca30c; --bad:#d03b3b; --warn:#fab219;
+  --sq-light:#eeeed2; --sq-dark:#769656; --hl:rgba(255,255,51,.5);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--page);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100vh}
+a{color:var(--accent);text-decoration:none}
+header{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);position:sticky;top:0;background:var(--page);z-index:10}
+header h1{font-size:17px;font-weight:700;letter-spacing:.3px}
+header .back{font-size:14px;color:var(--ink2);cursor:pointer}
+main{max-width:720px;margin:0 auto;padding:16px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px}
+.card h2{font-size:15px;margin-bottom:10px}
+.muted{color:var(--muted);font-size:13px}
+.small{font-size:12px}
+button{background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:9px 14px;font-size:14px;cursor:pointer;font-family:inherit}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.danger{background:transparent;border-color:var(--bad);color:var(--bad)}
+button:disabled{opacity:.4;cursor:default}
+select,input[type=text]{background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit}
+textarea{background:var(--surface2);color:var(--ink);border:1px solid var(--border);border-radius:8px;padding:8px 10px;font-size:14px;width:100%;min-height:60px;font-family:inherit}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.spread{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.setline{display:flex;justify-content:space-between;align-items:center;padding:12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:var(--surface);cursor:pointer}
+.setline:hover{background:var(--surface2)}
+.badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:12px;border:1px solid var(--border);color:var(--ink2)}
+.badge.good{color:var(--good);border-color:var(--good)}
+.badge.bad{color:var(--bad);border-color:var(--bad)}
+/* board */
+#boardwrap{display:flex;flex-direction:column;align-items:center;gap:10px}
+#board{display:grid;grid-template-columns:repeat(8,1fr);grid-template-rows:repeat(8,1fr);width:min(92vw,480px);aspect-ratio:1;border-radius:8px;overflow:hidden;user-select:none;position:relative;box-shadow:0 4px 18px rgba(0,0,0,.45)}
+.sq{position:relative;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.sq.light{background:var(--sq-light)} .sq.dark{background:var(--sq-dark)}
+.sq.sel,.sq.last{box-shadow:inset 0 0 0 100px var(--hl)}
+.sq .dot{position:absolute;width:32%;height:32%;border-radius:50%;background:rgba(13,13,13,.16)}
+.sq .ring{position:absolute;inset:3%;border-radius:50%;border:5px solid rgba(13,13,13,.16)}
+.sq .coord{position:absolute;font-size:11px;font-weight:600}
+.sq.light .coord{color:var(--sq-dark)} .sq.dark .coord{color:var(--sq-light)}
+.sq .cf{bottom:2px;right:3px}.sq .cr{top:2px;left:3px}
+img.pc{width:96%;height:96%;pointer-events:none;filter:drop-shadow(0 2px 2px rgba(0,0,0,.18))}
+.shake{animation:shk .3s}
+@keyframes shk{0%,100%{transform:translateX(0)}25%{transform:translateX(-6px)}75%{transform:translateX(6px)}}
+#promo{position:absolute;inset:0;background:rgba(13,13,13,.72);display:flex;align-items:center;justify-content:center;gap:10px;z-index:5}
+#promo button{width:64px;height:64px;padding:6px;background:#fff;border-radius:10px}
+#promo img{width:100%;height:100%}
+/* session hud */
+.hud{display:flex;justify-content:space-between;align-items:center;width:min(92vw,480px);font-size:14px;color:var(--ink2)}
+.hud b{color:var(--ink);font-variant-numeric:tabular-nums}
+.turnflag{font-weight:700}
+.turnflag.w{color:#fff}.turnflag.b{color:var(--ink2)}
+.feedback{min-height:22px;font-size:14px;font-weight:600;text-align:center}
+.feedback.ok{color:var(--good)} .feedback.ko{color:var(--bad)}
+.sesbtns{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+/* stats */
+.viz-root{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:12px}
+.viz-root h3{font-size:14px;margin-bottom:8px;color:var(--ink)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--grid)}
+td{padding:6px 8px;border-bottom:1px solid var(--grid);font-variant-numeric:tabular-nums}
+.delta-up{color:var(--good);font-weight:600}
+.delta-dn{color:var(--bad);font-weight:600}
+.solmoves{font-family:ui-monospace,monospace;font-size:13px;color:var(--ink2);word-break:break-all}
+.plist{max-height:50vh;overflow-y:auto}
+.pitem{display:flex;justify-content:space-between;align-items:center;padding:8px;border-bottom:1px solid var(--grid);cursor:pointer;gap:8px}
+.pitem:hover{background:var(--surface2)}
+/* plan d'amélioration */
+.plan ul,.plan ol{margin:6px 0 10px 20px;font-size:14px;color:var(--ink2)}
+.plan li{margin-bottom:5px;line-height:1.45}
+.plan b{color:var(--ink)}
+.plan .tag{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;font-weight:600;margin-right:6px}
+.plan .tag.a1{background:rgba(208,59,59,.15);color:var(--bad)}
+.plan .tag.a2{background:rgba(250,178,25,.15);color:var(--warn)}
+.plan .tag.a3{background:rgba(57,135,229,.15);color:var(--accent)}
+.plan .moves{font-family:ui-monospace,monospace;font-size:13px;color:var(--ink);background:var(--surface2);padding:8px 10px;border-radius:8px;display:block;margin:6px 0 10px}
+footer{text-align:center;color:var(--muted);font-size:11px;padding:20px}
+</style>
+</head>
+<body>
+<header><span class="back" id="backbtn" style="display:none">&#8592; Retour</span><h1 id="title">Woodpecker Tactics</h1><span id="syncdot" class="small" style="margin-left:auto;color:var(--muted)"></span></header>
+<main id="main"></main>
+<footer>Puzzles : base Lichess (CC0) &middot; progression stockée localement (pense à exporter)</footer>
+<script src="chess.js"></script>
+<script>
+"use strict";
+/* ---------- storage ---------- */
+const DB_KEY="wpk_v1";
+function db(){ try{return JSON.parse(localStorage.getItem(DB_KEY))||{sets:{}}}catch(e){return{sets:{}}} }
+function saveDb(d){ d.updatedAt=Date.now(); localStorage.setItem(DB_KEY,JSON.stringify(d)); schedulePush(); }
+
+/* ---------- sync VPS ---------- */
+const SYNC_KEY="wpk_sync", SYNC_URL="https://woodpecker.46-225-107-125.sslip.io/api/state";
+function syncCfg(){ try{return JSON.parse(localStorage.getItem(SYNC_KEY))||{}}catch(e){return{}} }
+let syncState="off"; // off | ok | pushing | error
+function setSyncState(st){ syncState=st; const dot=$("#syncdot"); if(dot){dot.textContent={off:"",ok:"☁ sync",pushing:"☁ ...",error:"☁ erreur"}[st]; dot.style.color=st==="error"?"var(--bad)":"var(--muted)";} }
+let pushTimer=null;
+function schedulePush(){ if(!syncCfg().token)return; clearTimeout(pushTimer); pushTimer=setTimeout(pushNow,2500); }
+async function pushNow(){
+  const cfg=syncCfg(); if(!cfg.token)return;
+  const d=db(); setSyncState("pushing");
+  try{
+    const r=await fetch(SYNC_URL,{method:"PUT",headers:{"Authorization":"Bearer "+cfg.token,"Content-Type":"application/json"},body:JSON.stringify({updatedAt:d.updatedAt||Date.now(),data:d})});
+    setSyncState(r.ok?"ok":"error");
+  }catch(e){ setSyncState("error"); }
+}
+async function pullOnStart(){
+  const cfg=syncCfg(); if(!cfg.token){setSyncState("off");return;}
+  try{
+    const r=await fetch(SYNC_URL,{headers:{"Authorization":"Bearer "+cfg.token}});
+    if(r.status===404){ setSyncState("ok"); pushNow(); return; }
+    if(!r.ok){ setSyncState("error"); return; }
+    const remote=await r.json();
+    const local=db();
+    if((remote.updatedAt||0)>(local.updatedAt||0)&&remote.data){
+      localStorage.setItem(DB_KEY,JSON.stringify(remote.data)); render();
+    }else if((local.updatedAt||0)>(remote.updatedAt||0)){ pushNow(); }
+    setSyncState("ok");
+  }catch(e){ setSyncState("error"); }
+}
+window.addEventListener("beforeunload",()=>{ if(pushTimer){ clearTimeout(pushTimer);
+  const cfg=syncCfg(),d=db(); if(cfg.token) navigator.sendBeacon&&fetch(SYNC_URL,{method:"PUT",keepalive:true,headers:{"Authorization":"Bearer "+cfg.token,"Content-Type":"application/json"},body:JSON.stringify({updatedAt:d.updatedAt,data:d})}).catch(()=>{}); } });
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+
+/* ---------- bands ---------- */
+const BANDS=[600,800,1000,1200,1400,1600,1800,2000,2200,2400,2600];
+const bandCache={};
+async function loadBand(b){
+  if(bandCache[b]) return bandCache[b];
+  const r=await fetch("puzzles/band-"+String(b).padStart(4,"0")+".json");
+  bandCache[b]=await r.json(); return bandCache[b];
+}
+
+/* ---------- helpers ---------- */
+const $=s=>document.querySelector(s);
+function el(tag,attrs,...kids){ const e=document.createElement(tag);
+  for(const k in attrs||{}){ if(k==="class")e.className=attrs[k]; else if(k.startsWith("on"))e.addEventListener(k.slice(2),attrs[k]); else e.setAttribute(k,attrs[k]); }
+  for(const c of kids) e.append(c); return e; }
+function fmtMs(ms){ const s=Math.round(ms/1000); const m=Math.floor(s/60); return m+":"+String(s%60).padStart(2,"0"); }
+function fmtDate(t){ return new Date(t).toLocaleDateString("fr-FR",{day:"2-digit",month:"2-digit"}); }
+function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
+
+/* ---------- cycle stats ---------- */
+function cycleStats(cy,n){
+  const res=Object.values(cy.results||{});
+  const done=res.length, ok=res.filter(r=>r.ok).length;
+  const time=res.reduce((s,r)=>s+r.time,0);
+  return {done,ok,time,acc:done?100*ok/done:0,ppm:time?done/(time/60000):0,complete:done>=n};
+}
+
+/* ---------- router ---------- */
+let view={name:"home"};
+function go(v){ view=v; render(); window.scrollTo(0,0); }
+function render(){
+  const m=$("#main"); m.innerHTML=""; m.className=""; clearInterval(render._tick);
+  $("#backbtn").style.display=view.name==="home"?"none":"";
+  $("#backbtn").onclick=()=>{ if(view.name==="session"||view.name==="anki"){ if(!confirm("Quitter la session ? (la progression des puzzles finis est sauvegardée)"))return; }
+    if(view.name==="replay"&&view.backFilter)return go({name:"failed",setId:view.setId,filter:view.backFilter});
+    go(view.setId?{name:"set",setId:view.setId}:{name:"home"}); };
+  ({home:vHome,create:vCreate,set:vSet,session:vSession,anki:vSession,stats:vStats,failed:vFailed,replay:vReplay,plan:vPlan})[view.name](m);
+}
+
+/* ---------- HOME ---------- */
+function vHome(m){
+  $("#title").textContent="Woodpecker Tactics";
+  const d=db(); const sets=Object.values(d.sets).sort((a,b)=>b.createdAt-a.createdAt);
+  m.append(el("div",{class:"spread",style:"margin-bottom:12px"},
+    el("button",{class:"primary",onclick:()=>go({name:"create"})},"+ Nouveau set"),
+    el("div",{class:"row"},
+      el("button",{onclick:exportData},"Exporter"),
+      el("button",{onclick:importData},"Importer"))));
+  // carte sync VPS
+  const cfg=syncCfg();
+  const syncCard=el("div",{class:"card"},el("h2",{},"Sauvegarde serveur (VPS)"));
+  if(cfg.token){
+    syncCard.append(el("div",{class:"spread"},
+      el("span",{class:"muted small"},"Activée · la progression est poussée automatiquement sur le VPS."),
+      el("div",{class:"row"},
+        el("button",{onclick:()=>pushNow()},"Pousser maintenant"),
+        el("button",{class:"danger",onclick:()=>{localStorage.removeItem(SYNC_KEY);setSyncState("off");render();}},"Désactiver"))));
+  }else{
+    const tok=el("input",{type:"text",placeholder:"Token de sync",style:"flex:1;min-width:200px"});
+    syncCard.append(el("div",{class:"row"},tok,
+      el("button",{class:"primary",onclick:()=>{ if(!tok.value.trim())return; localStorage.setItem(SYNC_KEY,JSON.stringify({token:tok.value.trim()})); pullOnStart(); render(); }},"Activer")),
+      el("p",{class:"muted small",style:"margin-top:8px"},"Colle le token (fourni par Claude, stocké sur le VPS dans /etc/woodpecker-sync/env). Sans sync, la progression reste locale au navigateur."));
+  }
+  // carte plan d'amélioration
+  m.append(el("div",{class:"card",style:"cursor:pointer",onclick:()=>go({name:"plan"})},
+    el("div",{class:"spread"},
+      el("h2",{style:"margin:0"},"🎯 Plan d'amélioration"),
+      el("span",{class:"badge"},"19/11/2026")),
+    el("p",{class:"muted small",style:"margin-top:6px"},"Diagnostic, 3 actions (~30 min/jour), fiche Scandinave. Validé par contre-expertise.")));
+  m.append(syncCard);
+  if(!sets.length) m.append(el("div",{class:"card muted"},"Aucun set. Crée ton premier set Woodpecker : choisis un niveau Elo et une taille, puis enchaîne les cycles de plus en plus vite."));
+  for(const s of sets){
+    const nCy=s.cycles.length, last=nCy?cycleStats(s.cycles[nCy-1],s.puzzles.length):null;
+    m.append(el("div",{class:"setline",onclick:()=>go({name:"set",setId:s.id})},
+      el("div",{},
+        el("div",{style:"font-weight:600"},s.name),
+        el("div",{class:"muted"},`${s.puzzles.length} puzzles · Elo ${s.band}-${s.band+199} · ${nCy} cycle${nCy>1?"s":""}`)),
+      last?el("span",{class:"badge"},last.complete?`dernier : ${last.acc.toFixed(0)} %`:`en cours ${last.done}/${s.puzzles.length}`):el("span",{class:"badge"},"nouveau")));
+  }
+}
+function exportData(){
+  const blob=new Blob([localStorage.getItem(DB_KEY)||"{}"],{type:"application/json"});
+  const a=el("a",{href:URL.createObjectURL(blob),download:"woodpecker-backup-"+new Date().toISOString().slice(0,10)+".json"}); a.click();
+}
+function importData(){
+  const i=el("input",{type:"file",accept:".json"});
+  i.onchange=()=>{ const f=i.files[0]; if(!f)return; f.text().then(t=>{ JSON.parse(t); localStorage.setItem(DB_KEY,t); render(); alert("Import OK"); }).catch(()=>alert("Fichier invalide")); };
+  i.click();
+}
+
+/* ---------- CREATE ---------- */
+function vCreate(m){
+  $("#title").textContent="Nouveau set";
+  const selB=el("select",{}); BANDS.forEach(b=>selB.append(el("option",{value:b},b===2600?"2600+":`${b} - ${b+199}`))); selB.value="1400";
+  const selN=el("select",{}); [50,100,200,300,500,1000].forEach(n=>selN.append(el("option",{value:n},n+" puzzles"))); selN.value="200";
+  const name=el("input",{type:"text",placeholder:"Nom (optionnel)"});
+  const btn=el("button",{class:"primary",onclick:async()=>{
+    btn.disabled=true; btn.textContent="Génération...";
+    const b=+selB.value,n=+selN.value;
+    const pool=await loadBand(b);
+    const puzzles=shuffle(pool.slice()).slice(0,n);
+    const d=db(); const id=uid();
+    d.sets[id]={id,name:name.value.trim()||`Set ${b}-${b+199} (${n})`,band:b,size:n,createdAt:Date.now(),puzzles,cycles:[],notes:{},anki:{}};
+    saveDb(d); go({name:"set",setId:id});
+  }},"Créer le set");
+  m.append(el("div",{class:"card"},
+    el("h2",{},"Paramètres"),
+    el("div",{class:"row",style:"margin-bottom:10px"},el("span",{class:"muted",style:"width:90px"},"Niveau Elo"),selB),
+    el("div",{class:"row",style:"margin-bottom:10px"},el("span",{class:"muted",style:"width:90px"},"Taille"),selN),
+    el("div",{class:"row",style:"margin-bottom:14px"},el("span",{class:"muted",style:"width:90px"},"Nom"),name),
+    btn,
+    el("p",{class:"muted small",style:"margin-top:10px"},"Méthode Woodpecker : le set est fixe. Tu le résous en cycles répétés, chaque cycle plus vite. Les puzzles ratés alimentent le mode Anki.")));
+}
+
+/* ---------- SET ---------- */
+function vSet(m){
+  const d=db(),s=d.sets[view.setId]; if(!s)return go({name:"home"});
+  $("#title").textContent=s.name;
+  const n=s.puzzles.length, nCy=s.cycles.length;
+  const cur=nCy?s.cycles[nCy-1]:null;
+  const curSt=cur?cycleStats(cur,n):null;
+  const inProgress=curSt&&!curSt.complete;
+  const failCount=Object.values(s.anki).filter(a=>a.fails>0).length;
+
+  const actions=el("div",{class:"card"},el("h2",{},"Woodpecker"));
+  if(inProgress) actions.append(el("button",{class:"primary",style:"margin-right:8px",onclick:()=>go({name:"session",setId:s.id})},`Continuer le cycle ${nCy} (${curSt.done}/${n})`));
+  else actions.append(el("button",{class:"primary",style:"margin-right:8px",onclick:()=>{const dd=db();dd.sets[s.id].cycles.push({startedAt:Date.now(),results:{}});saveDb(dd);go({name:"session",setId:s.id});}},`Démarrer le cycle ${nCy+1}`));
+  actions.append(el("button",{style:"margin-right:8px",onclick:()=>go({name:"stats",setId:s.id})},"Stats"),
+    el("button",{onclick:()=>go({name:"failed",setId:s.id})},`Ratés & notes (${failCount})`));
+
+  const anki=el("div",{class:"card"},el("h2",{},"Mode Anki"),
+    el("p",{class:"muted small",style:"margin-bottom:10px"},"Retravaille en priorité les puzzles que tu rates le plus (alimenté par tes cycles Woodpecker)."),
+    el("button",{onclick:()=>{ if(!failCount)return alert("Aucun puzzle raté pour l'instant."); go({name:"anki",setId:s.id}); }},`Session Anki (${Math.min(20,failCount)} puzzles)`));
+
+  const hist=el("div",{class:"card"},el("h2",{},"Historique des cycles"));
+  if(!nCy) hist.append(el("div",{class:"muted"},"Aucun cycle."));
+  s.cycles.forEach((cy,i)=>{
+    const st=cycleStats(cy,n);
+    hist.append(el("div",{class:"spread",style:"padding:6px 0;border-bottom:1px solid var(--grid)"},
+      el("span",{},`Cycle ${i+1} · ${fmtDate(cy.startedAt)}`),
+      el("span",{class:"muted"},st.complete?`${st.acc.toFixed(0)} % · ${fmtMs(st.time)} · ${st.ppm.toFixed(1)} puz/min`:`en cours ${st.done}/${n}`)));
+  });
+  const danger=el("div",{class:"card"},el("button",{class:"danger",onclick:()=>{ if(confirm("Supprimer ce set et toute sa progression ?")){const dd=db();delete dd.sets[s.id];saveDb(dd);go({name:"home"});} }},"Supprimer le set"));
+  m.append(actions,anki,hist,danger);
+}
+
+/* ---------- BOARD widget ---------- */
+function makeBoard(container,opts){
+  // opts: {puzzle, mode:"solve"|"replay", onResult(ok,timeMs,usedSolution), onStatus(txt,cls)}
+  const P=opts.puzzle, game=new Chess(P.fen), moves=P.moves.split(" ");
+  let mi=0, failed=false, usedSol=false, done=false, sel=null, t0=null;
+  const hero=(new Chess(P.fen)).turn()==="w"?"b":"w"; // moves[0] = coup adverse
+  const flip=hero==="b";
+  const pieceImg=(color,type)=>el("img",{class:"pc",draggable:"false",alt:color+type,src:"pieces/"+color+type.toUpperCase()+".svg"});
+  const board=el("div",{id:"board"});
+  container.append(board);
+  let lastMove=null;
+
+  function sqName(r,c){ const file="abcdefgh"[flip?7-c:c], rank=flip?r+1:8-r; return file+rank; }
+  function draw(){
+    board.innerHTML="";
+    for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+      const name=sqName(r,c), piece=game.get(name);
+      const sq=el("div",{class:"sq "+(((r+c)%2===0)?"light":"dark"),"data-sq":name,onclick:()=>tap(name)});
+      if(lastMove&&(name===lastMove.from||name===lastMove.to)) sq.classList.add("last");
+      if(sel===name) sq.classList.add("sel");
+      if(piece) sq.append(pieceImg(piece.color,piece.type));
+      if(sel){ const lm=game.moves({square:sel,verbose:true}).find(mv=>mv.to===name);
+        if(lm) sq.append(el("div",{class:piece?"ring":"dot"})); }
+      if(c===(flip?7:0)) sq.append(el("span",{class:"coord cr"},String(flip?r+1:8-r)));
+      if(r===7) sq.append(el("span",{class:"coord cf"},"abcdefgh"[flip?7-c:c]));
+      board.append(sq);
+    }
+  }
+  function status(txt,cls){ opts.onStatus&&opts.onStatus(txt,cls||""); }
+  function playOpp(){
+    if(mi>=moves.length)return;
+    const u=moves[mi];
+    const mv=game.move({from:u.slice(0,2),to:u.slice(2,4),promotion:u[4]||"q"});
+    lastMove=mv; mi++; draw();
+  }
+  function tap(name){
+    if(done||opts.mode==="replay")return;
+    if(t0===null)t0=Date.now();
+    const piece=game.get(name);
+    if(sel){
+      const legal=game.moves({square:sel,verbose:true}).find(mv=>mv.to===name);
+      if(legal){
+        if(legal.flags.includes("p")){ promo(sel,name); sel=null; return; }
+        attempt(sel,name,""); sel=null; return;
+      }
+    }
+    sel=(piece&&piece.color===game.turn())?name:null; draw();
+  }
+  function promo(from,to){
+    const ov=el("div",{id:"promo"}), col=game.turn();
+    for(const p of ["q","r","b","n"]) ov.append(el("button",{onclick:()=>{ov.remove();attempt(from,to,p);}},pieceImg(col,p)));
+    board.append(ov);
+  }
+  function attempt(from,to,prom){
+    const expected=moves[mi];
+    const uci=from+to+(prom||"");
+    const test=new Chess(game.fen());
+    const mv=test.move({from,to,promotion:prom||"q"});
+    if(!mv)return;
+    const isExpected=uci===expected||(prom===""&&from+to===expected.slice(0,4)&&expected.length===4);
+    const isMate=test.in_checkmate();
+    if(isExpected||isMate){
+      game.move({from,to,promotion:prom||"q"}); lastMove={from,to}; mi++; draw();
+      if(mi>=moves.length||isMate){ finish(true); }
+      else{ status("Juste ✓","ok"); setTimeout(playOpp,250); }
+    }else{
+      failed=true; board.classList.add("shake"); setTimeout(()=>board.classList.remove("shake"),320);
+      status("Raté ✗ : réessaie ou regarde la solution","ko"); draw();
+      opts.onFail&&opts.onFail();
+    }
+  }
+  function finish(okSolve){
+    if(done)return; done=true;
+    const ok=okSolve&&!failed&&!usedSol;
+    status(ok?"Résolu ✓":"Terminé (compté raté)",(ok?"ok":"ko"));
+    opts.onResult&&opts.onResult(ok,t0?Date.now()-t0:0,usedSol);
+  }
+  function showSolution(){
+    usedSol=true; failed=true;
+    const step=()=>{ if(mi>=moves.length){finish(false);return;} playOpp(); setTimeout(step,700); };
+    status("Solution...","ko"); step();
+  }
+  // replay mode controls
+  function replayStep(dir){
+    if(dir>0&&mi<moves.length){ playOpp(); }
+    else if(dir<0&&mi>0){ game.undo(); mi--; lastMove=null; draw(); }
+  }
+  playOpp(); // coup adverse initial
+  if(opts.mode!=="replay") status((hero==="w"?"Trait aux Blancs":"Trait aux Noirs"),"");
+  return {showSolution,replayStep,hero,get mi(){return mi},get total(){return moves.length},isDone:()=>done,get failed(){return failed}};
+}
+
+/* ---------- SESSION (woodpecker + anki) ---------- */
+function vSession(m){
+  const isAnki=view.name==="anki";
+  const d=db(),s=d.sets[view.setId]; if(!s)return go({name:"home"});
+  let queue; // liste d'indices de puzzles dans s.puzzles
+  const cy=s.cycles[s.cycles.length-1];
+  if(isAnki){
+    const scored=s.puzzles.map((p,i)=>({i,a:s.anki[p.id]})).filter(x=>x.a&&x.a.fails>0)
+      .sort((x,y)=>(y.a.fails*2-y.a.oks)-(x.a.fails*2-x.a.oks)||(x.a.last||0)-(y.a.last||0));
+    queue=scored.slice(0,20).map(x=>x.i);
+    $("#title").textContent="Session Anki";
+  }else{
+    queue=s.puzzles.map((_,i)=>i).filter(i=>!(cy.results[i]));
+    $("#title").textContent=`Cycle ${s.cycles.length}`;
+  }
+  let qi=0, reviewing=null; // reviewing = index résolu qu'on re-regarde
+  let practicing=false; // rejouer le puzzle terminé sans ré-enregistrer
+  const solved=[]; // indices résolus cette session (pour "précédent")
+  const completed=new Set(); // positions de queue déjà enregistrées (évite double enregistrement)
+  function unclearBtn(p){
+    const isU=()=>!!(s.unclear||{})[p.id];
+    const b=el("button",{onclick:()=>{const dd=db(),ss=dd.sets[s.id];ss.unclear=ss.unclear||{};
+      if(ss.unclear[p.id])delete ss.unclear[p.id];else ss.unclear[p.id]=true;
+      saveDb(dd);s.unclear=ss.unclear;upd();}});
+    const upd=()=>{b.textContent=isU()?"❓ marqué « pas compris »":"❓ Pas compris";
+      b.style.borderColor=isU()?"var(--warn)":"";b.style.color=isU()?"var(--warn)":"";};
+    upd(); return b;
+  }
+  const wrap=el("div",{id:"boardwrap"});
+  const hud=el("div",{class:"hud"});
+  const fb=el("div",{class:"feedback"});
+  const btns=el("div",{class:"sesbtns"});
+  const noteBox=el("div",{style:"width:min(92vw,480px);display:none"});
+  m.append(el("div",{style:"display:flex;flex-direction:column;align-items:center;gap:10px"},hud,wrap,fb,btns,noteBox));
+  let bd=null, puzzleStart=Date.now();
+
+  function hudUpdate(){
+    const total=isAnki?queue.length:s.puzzles.length;
+    const pos=isAnki?qi+1:s.puzzles.length-queue.length+qi+1;
+    const p=currentPuzzle();
+    hud.innerHTML="";
+    hud.append(el("span",{},`Puzzle `,el("b",{},`${Math.min(pos,total)}/${total}`)),
+      el("span",{class:"muted"},p?`Elo ${p.rating}`:""),
+      el("b",{id:"clock"},"0:00"));
+  }
+  function currentIdx(){ return reviewing!==null?reviewing:queue[qi]; }
+  function currentPuzzle(){ const i=currentIdx(); return i===undefined?null:s.puzzles[i]; }
+
+  clearInterval(render._tick);
+  render._tick=setInterval(()=>{ const c=$("#clock"); if(c&&reviewing===null&&bd&&!bd.isDone()) c.textContent=fmtMs(Date.now()-puzzleStart); },500);
+
+  function load(){
+    if(reviewing===null&&!practicing) while(qi<queue.length&&completed.has(qi)) qi++;
+    const i=currentIdx();
+    if(i===undefined){ finishSession(); return; }
+    const p=s.puzzles[i]; wrap.innerHTML=""; fb.textContent=""; fb.className="feedback";
+    puzzleStart=Date.now(); hudUpdate(); renderNote(p);
+    const replayMode=reviewing!==null;
+    bd=makeBoard(wrap,{puzzle:p,mode:replayMode?"replay":"solve",
+      onStatus:(t,c)=>{fb.textContent=t;fb.className="feedback "+c;},
+      onFail:()=>{},
+      onResult:(ok,time,usedSol)=>{ if(practicing) renderBtns(false,p,true); else record(i,ok,time); }});
+    if(practicing){ fb.textContent="Rejeu (non compté)"; fb.className="feedback"; }
+    renderBtns(replayMode,p);
+  }
+  function record(i,ok,time){
+    const dd=db(),ss=dd.sets[s.id];
+    if(!isAnki){
+      ss.cycles[ss.cycles.length-1].results[i]={ok,time,at:Date.now()};
+    }
+    const pid=ss.puzzles[i].id;
+    const a=ss.anki[pid]||(ss.anki[pid]={fails:0,oks:0,last:0});
+    if(ok)a.oks++; else a.fails++;
+    a.last=Date.now(); saveDb(dd); Object.assign(s,dd.sets[s.id]);
+    solved.push(i); completed.add(qi);
+    renderBtns(false,s.puzzles[i],true);
+  }
+  function renderBtns(replayMode,p,justDone){
+    btns.innerHTML="";
+    if(replayMode){
+      btns.append(
+        el("button",{onclick:()=>bd.replayStep(-1)},"◀ coup"),
+        el("button",{onclick:()=>bd.replayStep(1)},"coup ▶"),
+        el("button",{class:"primary",onclick:()=>{reviewing=null;practicing=false;load();}},"Reprendre la session"));
+      fb.textContent="Mode revue (non chronométré)"; fb.className="feedback";
+    }else if(justDone||bd&&bd.isDone()){
+      btns.append(el("button",{class:"primary",onclick:()=>{qi++;reviewing=null;practicing=false;load();}},"Puzzle suivant ▶"));
+      btns.append(el("button",{onclick:()=>{practicing=true;load();}},"↻ Rejouer"));
+      btns.append(unclearBtn(p));
+      if(solved.length) btns.append(el("button",{onclick:()=>{reviewing=solved[solved.length-1];practicing=false;load();}},"◀ revoir le précédent"));
+      btns.append(el("button",{onclick:toggleNote},"Note"));
+      btns.append(el("span",{class:"solmoves",style:"width:100%;text-align:center"},"Solution : "+p.moves));
+    }else{
+      btns.append(el("button",{onclick:()=>bd.showSolution()},"Voir la solution"));
+      if(solved.length) btns.append(el("button",{onclick:()=>{reviewing=solved[solved.length-1];load();}},"◀ revoir le précédent"));
+      btns.append(el("button",{onclick:toggleNote},"Note"));
+    }
+  }
+  function renderNote(p){
+    noteBox.innerHTML=""; noteBox.style.display="none";
+    const ta=el("textarea",{placeholder:"Note / commentaire sur ce puzzle..."}); ta.value=s.notes[p.id]||"";
+    ta.onchange=()=>{const dd=db();dd.sets[s.id].notes[p.id]=ta.value;saveDb(dd);s.notes[p.id]=ta.value;};
+    noteBox.append(ta);
+  }
+  function toggleNote(){ noteBox.style.display=noteBox.style.display==="none"?"":"none"; }
+  function finishSession(){
+    if(!isAnki){ const dd=db(),cyc=dd.sets[s.id].cycles[dd.sets[s.id].cycles.length-1];
+      if(Object.keys(cyc.results).length>=s.puzzles.length&&!cyc.finishedAt){cyc.finishedAt=Date.now();saveDb(dd);} }
+    clearInterval(render._tick);
+    const st=isAnki?null:cycleStats(db().sets[s.id].cycles.at(-1),s.puzzles.length);
+    m.innerHTML="";
+    m.append(el("div",{class:"card",style:"text-align:center"},
+      el("h2",{},isAnki?"Session Anki terminée":"Cycle terminé !"),
+      st?el("p",{style:"margin:10px 0"},`Précision ${st.acc.toFixed(0)} % · ${fmtMs(st.time)} · ${st.ppm.toFixed(1)} puz/min`):"",
+      el("div",{class:"row",style:"justify-content:center;margin-top:10px"},
+        el("button",{class:"primary",onclick:()=>go({name:"stats",setId:s.id})},"Voir les stats"),
+        el("button",{onclick:()=>go({name:"set",setId:s.id})},"Retour au set"))));
+  }
+  if(!queue.length){finishSession();return;}
+  load();
+}
+
+/* ---------- STATS ---------- */
+function vStats(m){
+  const d=db(),s=d.sets[view.setId]; if(!s)return go({name:"home"});
+  $("#title").textContent="Stats · "+s.name;
+  const n=s.puzzles.length;
+  const cycles=s.cycles.map((cy,i)=>({i:i+1,...cycleStats(cy,n),date:cy.startedAt})).filter(c=>c.complete);
+  if(!cycles.length){ m.append(el("div",{class:"card muted"},"Termine au moins un cycle complet pour voir les stats.")); return; }
+  m.append(chartCard("Précision par cycle (%)",cycles.map(c=>c.acc),cycles.map(c=>"C"+c.i),v=>v.toFixed(0)+" %",true),
+           chartCard("Vitesse par cycle (puzzles/min)",cycles.map(c=>c.ppm),cycles.map(c=>"C"+c.i),v=>v.toFixed(1),true));
+  const tbl=el("table",{},el("tr",{},...["Cycle","Date","Précision","Temps","Puz/min"].map(h=>el("th",{},h))));
+  cycles.forEach((c,k)=>{
+    const prev=k>0?cycles[k-1]:null;
+    const dAcc=prev?c.acc-prev.acc:null, dPpm=prev?c.ppm-prev.ppm:null;
+    tbl.append(el("tr",{},
+      el("td",{},"C"+c.i), el("td",{},fmtDate(c.date)),
+      el("td",{},c.acc.toFixed(0)+" % ",dAcc===null?"":el("span",{class:dAcc>=0?"delta-up":"delta-dn"},(dAcc>=0?"+":"")+dAcc.toFixed(0))),
+      el("td",{},fmtMs(c.time)),
+      el("td",{},c.ppm.toFixed(1)+" ",dPpm===null?"":el("span",{class:dPpm>=0?"delta-up":"delta-dn"},(dPpm>=0?"+":"")+dPpm.toFixed(1)))));
+  });
+  m.append(el("div",{class:"viz-root"},el("h3",{},"Détail des cycles"),tbl));
+}
+function chartCard(title,values,labels,fmt,higherIsBetter){
+  // barres : C1 bleu (référence) ; ensuite vert si progression vs cycle précédent, rouge si recul, + signe en canal secondaire
+  const W=640,H=200,PB=28,PT=24,PL=8,PR=8;
+  const max=Math.max(...values)*1.15||1;
+  const bw=Math.min(64,(W-PL-PR)/values.length*0.6);
+  const svg=document.createElementNS("http://www.w3.org/2000/svg","svg");
+  svg.setAttribute("viewBox",`0 0 ${W} ${H}`); svg.style.width="100%";
+  const ns=(t,a)=>{const e=document.createElementNS("http://www.w3.org/2000/svg",t);for(const k in a)e.setAttribute(k,a[k]);return e;};
+  svg.append(ns("line",{x1:PL,y1:H-PB,x2:W-PR,y2:H-PB,stroke:"var(--baseline)","stroke-width":1}));
+  values.forEach((v,i)=>{
+    const cx=PL+(W-PL-PR)*(i+0.5)/values.length;
+    const h=Math.max(2,(H-PB-PT)*v/max), y=H-PB-h;
+    const delta=i>0?v-values[i-1]:null;
+    const fill=delta===null?"var(--accent)":(delta>=0===higherIsBetter?"var(--good)":"var(--bad)");
+    const rect=ns("rect",{x:cx-bw/2,y,width:bw,height:h,rx:4,fill});
+    const t=ns("title",{}); t.textContent=`${labels[i]} : ${fmt(v)}`+(delta!==null?` (${delta>=0?"+":""}${fmt(delta).replace(" %","")} vs ${labels[i-1]})`:"");
+    rect.append(t); svg.append(rect);
+    const val=ns("text",{x:cx,y:y-7,"text-anchor":"middle",fill:"var(--ink2)","font-size":13});
+    val.textContent=fmt(v)+(delta!==null?(delta>=0?" ↑":" ↓"):""); svg.append(val);
+    const lab=ns("text",{x:cx,y:H-9,"text-anchor":"middle",fill:"var(--muted)","font-size":12});
+    lab.textContent=labels[i]; svg.append(lab);
+  });
+  return el("div",{class:"viz-root"},el("h3",{},title),svg,
+    el("p",{class:"muted small",style:"margin-top:4px"},"Vert ↑ = progression vs cycle précédent · rouge ↓ = recul · bleu = cycle de référence"));
+}
+
+/* ---------- FAILED / NOTES ---------- */
+function vFailed(m){
+  const d=db(),s=d.sets[view.setId]; if(!s)return go({name:"home"});
+  $("#title").textContent="Ratés & notes";
+  const unclear=s.unclear||{};
+  const filt=view.filter||"tous";
+  const all=s.puzzles.map((p,i)=>({p,i,a:s.anki[p.id]||{fails:0,oks:0}}))
+    .filter(x=>x.a.fails>0||s.notes[x.p.id]||unclear[x.p.id]);
+  const items=all.filter(x=>filt==="rates"?x.a.fails>0:filt==="incompris"?unclear[x.p.id]:true)
+    .sort((x,y)=>y.a.fails-x.a.fails);
+  const tabs=el("div",{class:"row",style:"margin-bottom:10px"});
+  [["tous","Tous ("+all.length+")"],["rates","Ratés"],["incompris","❓ Pas compris ("+all.filter(x=>unclear[x.p.id]).length+")"]]
+    .forEach(([k,lab])=>tabs.append(el("button",{class:filt===k?"primary":"",onclick:()=>go({name:"failed",setId:s.id,filter:k})},lab)));
+  m.append(tabs);
+  if(!items.length){ m.append(el("div",{class:"card muted"},"Rien dans cette catégorie.")); return; }
+  const list=el("div",{class:"plist card"});
+  for(const x of items){
+    list.append(el("div",{class:"pitem",onclick:()=>go({name:"replay",setId:s.id,idx:x.i,backFilter:filt})},
+      el("span",{},`#${x.i+1} · Elo ${x.p.rating}`,
+        s.notes[x.p.id]?el("span",{class:"muted small"}," · 📝"):"",
+        unclear[x.p.id]?el("span",{class:"small",style:"color:var(--warn)"}," · ❓"):""),
+      el("span",{},
+        x.a.fails?el("span",{class:"badge bad",style:"margin-right:6px"},`${x.a.fails} raté${x.a.fails>1?"s":""}`):"",
+        x.a.oks?el("span",{class:"badge good"},`${x.a.oks} ok`):"")));
+  }
+  m.append(list);
+}
+
+/* ---------- REPLAY (exploration solution) ---------- */
+function vReplay(m){
+  const d=db(),s=d.sets[view.setId]; if(!s)return go({name:"home"});
+  const p=s.puzzles[view.idx];
+  $("#title").textContent=`Puzzle #${view.idx+1} · Elo ${p.rating}`;
+  const wrap=el("div",{id:"boardwrap"});
+  const fb=el("div",{class:"feedback"});
+  const nav=el("div",{class:"sesbtns"});
+  let bd=null;
+  function mount(mode){
+    wrap.innerHTML=""; nav.innerHTML=""; fb.textContent=""; fb.className="feedback";
+    bd=makeBoard(wrap,{puzzle:p,mode,onStatus:(t,c)=>{fb.textContent=t;fb.className="feedback "+c;},
+      onResult:()=>nav.prepend(el("button",{class:"primary",onclick:()=>mount("solve")},"↻ Encore"))});
+    if(mode==="replay"){
+      nav.append(el("button",{onclick:()=>bd.replayStep(-1)},"◀ coup"),
+        el("button",{onclick:()=>bd.replayStep(1)},"coup ▶"),
+        el("button",{onclick:()=>mount("solve")},"↻ Le rejouer"));
+    }else{
+      fb.textContent="Rejeu (non compté)";
+      nav.append(el("button",{onclick:()=>bd.showSolution()},"Voir la solution"),
+        el("button",{onclick:()=>mount("replay")},"Mode revue"));
+    }
+    nav.append(el("a",{href:"https://lichess.org/training/"+p.id,target:"_blank"},el("button",{},"Ouvrir sur Lichess")));
+  }
+  const unclearB=(()=>{ const isU=()=>!!(s.unclear||{})[p.id];
+    const b=el("button",{onclick:()=>{const dd=db(),ss=dd.sets[s.id];ss.unclear=ss.unclear||{};
+      if(ss.unclear[p.id])delete ss.unclear[p.id];else ss.unclear[p.id]=true;
+      saveDb(dd);s.unclear=ss.unclear;upd();}});
+    const upd=()=>{b.textContent=isU()?"❓ marqué « pas compris » (cliquer si compris)":"❓ Pas compris";
+      b.style.borderColor=isU()?"var(--warn)":"";b.style.color=isU()?"var(--warn)":"";};
+    upd(); return b; })();
+  const ta=el("textarea",{placeholder:"Note / explication..."}); ta.value=s.notes[p.id]||"";
+  ta.onchange=()=>{const dd=db();dd.sets[s.id].notes[p.id]=ta.value;saveDb(dd);};
+  m.append(el("div",{style:"display:flex;flex-direction:column;align-items:center;gap:10px"},wrap,fb,nav,unclearB,
+    el("div",{class:"solmoves",style:"width:min(92vw,480px)"},"Solution (UCI) : "+p.moves),
+    el("div",{class:"muted small"},"Thèmes : "+p.themes),
+    el("div",{style:"width:min(92vw,480px)"},ta)));
+  mount("replay");
+}
+
+/* ---------- PLAN D'AMÉLIORATION ---------- */
+function vPlan(m){
+  $("#title").textContent="Plan d'amélioration";
+  m.className="plan";
+  const card=(title,...kids)=>el("div",{class:"card"},el("h2",{},title),...kids);
+  const html=(s)=>{const d=el("div",{});d.innerHTML=s;return d;};
+
+  m.append(card("Diagnostic (Insights chess.com, 19/11/2026)",html(`
+    <p class="muted small" style="margin-bottom:8px">Niveau 1300-1350 · plan validé par contre-expertise neutre le 19/11/2026.</p>
+    <ul>
+      <li><b>Gaffes / matériel en prise = levier n°1.</b> Free Pieces trouvées 71,4&nbsp;% vs 77,2&nbsp;% (pairs), pièces piégées 30,6&nbsp;% vs 38,1&nbsp;%. Effondrement en positions ouvertes (Overall 52,1&nbsp;% vs 61,5&nbsp;%). À ce niveau, ~70&nbsp;% de la progression vient de là.</li>
+      <li><b>Scandinave noirs = seul vrai trou d'ouverture.</b> 144 parties, accuracy 72,6&nbsp;% vs 82,1&nbsp;%. Tout le reste des ouvertures est du bruit statistique.</li>
+      <li><b>Activité des pièces = seul déficit stratégique constant</b> (54,9&nbsp;% vs 61,5&nbsp;%). Heuristique : améliorer la pièce la plus passive.</li>
+      <li><b>Points forts</b> (ne pas travailler) : tactique spectaculaire (sacrifices 28&nbsp;% vs 15,2&nbsp;%, mats, clouages), attaque en positions fermées (69,2&nbsp;% vs 56,8&nbsp;%). Alekhine noirs : 66&nbsp;% de victoires, arme déjà gagnante.</li>
+    </ul>`)));
+
+  m.append(card("Les 3 actions (~30 min/jour)",html(`
+    <ul style="list-style:none;margin-left:0">
+      <li><span class="tag a1">1</span><b>Anti-gaffe (15 min/jour, 80&nbsp;% du gain).</b> Avant chaque coup, une seule question : «&nbsp;ce coup laisse-t-il quelque chose en prise, et que menace son dernier coup ?&nbsp;» + ~15 puzzles/jour ici même, en privilégiant les motifs simples (matériel gratuit, défense) plutôt que les combinaisons brillantes.</li>
+      <li><span class="tag a2">2</span><b>Revue de chaque défaite (10 min/jour).</b> Rejouer la partie perdue, trouver LE coup qui a perdu, se demander «&nbsp;était-ce une tactique en 1-2 coups que je pouvais voir ?&nbsp;». Pas d'analyse moteur profonde. Noter le motif s'il se répète.</li>
+      <li><span class="tag a3">3</span><b>Fiche Scandinave (ci-dessous).</b> La jouer, ne rien étudier d'autre en ouverture.</li>
+    </ul>
+    <p class="muted small"><b>Cadence :</b> Rapide 10+0 minimum, idéalement 15|10, et utiliser le temps. <b>Mesure du progrès :</b> elo + gaffes/partie (pas l'accuracy chess.com, trop bruitée). <b>Optionnel</b> (15 min/semaine) : finales de base (opposition, Lucena, Philidor).</p>`)));
+
+  m.append(card("Fiche Scandinave (noirs)",html(`
+    <p class="muted small" style="margin-bottom:6px">Le schéma à automatiser (répertoire 3...Da5) :</p>
+    <span class="moves">1.e4 d5 2.exd5 Dxd5 3.Cc3 Da5 4.d4 Cf6 5.Cf3 c6 6.Fc4 Ff5 7.Fd2 e6<br>puis Cbd7, Fe7, petit roque</span>
+    <p class="muted small" style="margin-bottom:4px">Les 4 réflexes :</p>
+    <ol>
+      <li><b>...c6 tôt</b> : repli c7 pour la dame + neutralise les sauts Cd5.</li>
+      <li><b>Ff5 AVANT ...e6</b> (sinon fou enfermé).</li>
+      <li><b>Fd2 blanc = alerte</b> : découverte sur la dame a5 si le Cc3 bouge. Avec c6 joué, tu es couvert.</li>
+      <li><b>Surveille f7</b> tant que tu n'as pas roqué (Fc4+Cg5) : ...e6 ferme la diagonale.</li>
+    </ol>
+    <p class="muted small" style="margin-bottom:4px">Si les blancs dévient :</p>
+    <ul>
+      <li><b>4.b4!?</b> : prends (4...Dxb4 5.Tb1 Dd6), développe-toi, ne cherche pas un 2e pion.</li>
+      <li><b>2.Cc3</b> : 2...dxe4 3.Cxe4 Cd7 puis Cgf6.</li>
+      <li><b>2.e5?!</b> : 2...Ff5 puis e6, c5 (Française avec le bon fou dehors).</li>
+      <li><b>Gambit f3 (Blackmar-Diemer)</b> : accepte, rends le pion si ça développe, fianchetto g6 solide.</li>
+    </ul>
+    <p class="muted small">Milieu de jeu : structure c6-e6 sans faiblesse, échange les pièces sans crainte, pousse ...c5 une fois roqué, dame en c7/d8 vers le coup 10 (normal).</p>`)));
+
+  m.append(card("À ne PAS faire (effort gaspillé à 1300)",html(`
+    <ul>
+      <li>Étudier l'Alekhine, le Scotch, ou toute théorie d'ouverture au-delà du coup ~8.</li>
+      <li>Se fixer des objectifs chiffrés sur l'accuracy chess.com (métrique bruitée).</li>
+      <li>Cours de stratégie approfondis (espace, structures) : seule «&nbsp;la pièce passive&nbsp;» compte.</li>
+      <li>Jouer en bullet/blitz rapide : les gaffes viennent de ne pas regarder.</li>
+    </ul>
+    <p class="muted small">Fichiers sources sur le VPS : workspace_jad/personal/games/chess-improvement/ (README, plan, fiche). Prochain point : renvoyer les stats Insights vers 50 parties.</p>`)));
+}
+
+render();
+pullOnStart();
+</script>
+</body>
+</html>
